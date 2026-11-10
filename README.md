@@ -87,7 +87,8 @@ Game Boy / Color, Sega Master System / Game Gear та інші системи з
 ## Корпус
 
 STL у [`3d/`](3d): верхня кришка [`Cover.stl`](3d/Cover.stl) і нижня [`Back.stl`](3d/Back.stl).
-Друкував PLA, підійде будь-який. Дві кришки на 4 гвинти, слот під SD і USB-C збоку,
+Друкував PLA, підійде будь-який. Готовий профіль друку для Bambu Lab —
+на [MakerWorld](https://makerworld.com/en/models/3585503-retro-console-esp32-s3-nes-game-boy-sega). Дві кришки на 4 гвинти, слот під SD і USB-C збоку,
 вимикач знизу.
 
 ## Прошивка
@@ -143,6 +144,7 @@ Master System / Game Gear and the rest of [Retro-Go](https://github.com/ducalex/
   GPIO 33–37 are octal PSRAM on N16R8; power the joystick from 3.3 V only.
 - Build: clone Retro-Go, run `firmware/retro-go-overlay/apply.ps1`, use ESP-IDF 5.3.x,
   `python rg_tool.py build-fw launcher retro-core --target=retro-console`.
-- Case: [`3d/Cover.stl`](3d/Cover.stl), [`3d/Back.stl`](3d/Back.stl), PLA is fine.
+- Case: [`3d/Cover.stl`](3d/Cover.stl), [`3d/Back.stl`](3d/Back.stl), PLA is fine; ready-to-print profile on
+  [MakerWorld](https://makerworld.com/en/models/3585503-retro-console-esp32-s3-nes-game-boy-sega).
 
 License: GPL-2.0 (same as Retro-Go). ROMs are not included — use your own dumps.
