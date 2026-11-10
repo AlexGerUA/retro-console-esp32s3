@@ -358,16 +358,45 @@ text(XL(490, 211)[0], 1738, 'XL6009 DC-DC boost → 5.0 В', 21, anchor='mm')
 text(TP(380, 231)[0], 1990, 'TP4056 + захист DW01 (заряд USB-C)', 21, anchor='mm')
 # battery sense divider 100k / 100k -> GPIO3
 dy_ = 2290
-wire([(2975, 2120), (3040, 2120), (3040, dy_), (1560, dy_), (1560, XO_N[1])], 'grey', 5, (False, False))
+wire([(2975, 2120), (3040, 2120), (3040, dy_), (1505, dy_), (1505, XO_N[1])], 'grey', 5, (False, False))
 dot(2975, 2120, 'red')
-dot(1560, XO_N[1], 'black')
+dot(1505, XO_N[1], 'black')
 resistor(2080, dy_, 2280, dy_, '100k', 30)
 resistor(1700, dy_, 1900, dy_, '100k', 30)
 wire([(1990, dy_), (1990, dy_ - 50), (1380, dy_ - 50), (1380, YL['3']), (LX, YL['3'])], 'teal', 5, (False, True))
 dot(1990, dy_, 'teal')
 text(1990, dy_ + 34, 'BAT/2 → GPIO3', 21, anchor='mm')
 text(2960, dy_ + 30, 'BAT+', 19, anchor='rm')
-text(1575, dy_ + 30, 'GND', 19)
+text(1520, dy_ + 30, 'GND', 19)
+
+def bypass(p0, p1, kind, tag_at):
+    """Decoupling cap between a + point (p0) and a GND point (p1): 'e' = 470 uF electrolytic, 'c' = 100 nF."""
+    cx, cy = (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2
+    wire([p0, (cx, cy)], 'red', 5, (False, False))
+    wire([(cx, cy), p1], 'black', 5, (False, False))
+    dot(p0[0], p0[1], 'red')
+    dot(p1[0], p1[1], 'black')
+    if kind == 'e':
+        r = 23
+        d.ellipse(P(cx - r, cy - r, cx + r, cy + r), fill='#1d2a44', outline='#0c0c0c', width=2 * S)
+        d.ellipse(P(cx - r + 6, cy - r + 6, cx + r - 6, cy + r - 6), fill='#c9ccd0', outline='#7a7f86', width=S)
+        d.chord(P(cx - r + 6, cy - r + 6, cx + r - 6, cy + r - 6), 35, 145, fill='#1d2a44')
+        text(cx, cy - 4, '+', 16, '#1d2a44', 'mm')
+        label = '470 мкФ'
+    else:
+        r = 19
+        d.ellipse(P(cx - r, cy - r, cx + r, cy + r), fill='#e0a13a', outline='#7d5412', width=2 * S)
+        text(cx, cy, '104', 12, '#5a3a08', 'mm')
+        label = '100 нФ'
+    tag(tag_at[0], tag_at[1], label, 'mm', 13)
+
+
+# decoupling on the board's power inputs: 470 uF + 100 nF on 5V-G and on 3V3-G
+bypass((1550, XO_P[1]), (1550, XO_N[1]), 'e', (1550, XO_N[1] + 40))
+bypass((1605, XO_P[1]), (1605, XO_N[1]), 'c', (1605, XO_P[1] - 40))
+bypass((LX - 45, 268), (RX + 40, 268), 'e', (1650, 268))
+bypass((LX - 45, 306), (RX + 40, 306), 'c', (1850, 306))
+
 
 # =====================================================================================
 #  NOTES + TITLE
@@ -386,7 +415,7 @@ d.text(P(tx + 30, ty + 24), 'RETRO CONSOLE', font=HEAD(66), fill=INK)
 d.text(P(tx + 30, ty + 104), 'ESP32-S3 · повна схема з’єднань', font=HEAD(32), fill='#444444')
 text(tx + 30, ty + 172, 'плата YD-ESP32-S3 N16R8 · прошивка Retro-Go', 17, '#444444', bold=False)
 text(tx + 30, ty + 204, 'резистори: 7 × 10 кОм (підтяжка кнопок), 2 × 100 кОм (дільник)', 17, '#444444', bold=False)
-text(tx + 30, ty + 236, 'усі кнопки замикають GPIO на GND (активний рівень 0)', 17, '#444444', bold=False)
+text(tx + 30, ty + 236, 'конденсатори: 470 мкФ + 100 нФ на входах 5V і 3V3 плати', 17, '#444444', bold=False)
 text(tx + 30, ty + 276, 'github.com/AlexGerUA/retro-console-esp32s3', 17)
 d.text(P(W - 50, H - 36), 'Alex_Ger_UA', font=HEAD(26), fill='#77736a', anchor='rm')
 
