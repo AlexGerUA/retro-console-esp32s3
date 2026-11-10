@@ -1,302 +1,402 @@
-"""docs/pinout.png — wiring drawn like a maker's bench: cutting mat, PCB, dupont wires.
+"""docs/pinout.png — full wiring diagram: module photos + coloured wires + every R and C.
 
-YD-ESP32-S3 has the same header order as ESP32-S3-DevKitC-1. Pins come from
-firmware/retro-go-overlay/components/retro-go/targets/retro-console/config.h.
+Pins come from firmware/retro-go-overlay/components/retro-go/targets/retro-console/config.h.
+Photos of the modules live in docs/parts/. Run: python docs/make_pinout.py
 """
-import math
-import random
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-W, H, S = 2400, 1820, 2
-random.seed(7)
-
-MAT, GRID, GRID2 = '#245446', '#2f6a59', '#3b7e6b'
-PCB, PCB_EDGE, PAD, SILK = '#15181c', '#2a2f36', '#d9a637', '#e8e8e2'
-WIRE = {'red': '#d7332b', 'black': '#202020', 'yellow': '#f2c12e', 'orange': '#ef7d22',
-        'green': '#3aa655', 'blue': '#2e7fd8', 'purple': '#8a4fc7', 'grey': '#9aa0a6',
-        'white': '#efefe9', 'brown': '#8b5a2b', 'pink': '#e85c9a', 'cyan': '#2bb5c9'}
+HERE = Path(__file__).parent
+W, H, S = 3400, 2400, 2
+PAPER = '#f4f1e8'
+INK = '#1d1d1b'
+C = {'red': '#d7332b', 'black': '#222222', 'yellow': '#f0c020', 'orange': '#ef7d22', 'green': '#2f9e4f',
+     'blue': '#2a78d6', 'purple': '#8a4fc7', 'grey': '#8d9399', 'white': '#fbfbf7', 'brown': '#8b5a2b',
+     'pink': '#e85c9a', 'cyan': '#19a9bf', 'teal': '#0f8f7a'}
 
 
 def font(name, size):
     for n in (name, 'consola.ttf', 'DejaVuSansMono.ttf'):
         try:
-            return ImageFont.truetype(n, size * S)
+            return ImageFont.truetype(n, int(size * S))
         except OSError:
             pass
     return ImageFont.load_default()
 
 
-MONO = lambda s: font('consola.ttf', s)          # noqa: E731
-MONOB = lambda s: font('consolab.ttf', s)        # noqa: E731
-HEAD = lambda s: font('bahnschrift.ttf', s)      # noqa: E731
+def MONO(s): return font('consola.ttf', s)
+def MONOB(s): return font('consolab.ttf', s)
+def HEAD(s): return font('bahnschrift.ttf', s)
 
-img = Image.new('RGB', (W * S, H * S), MAT)
+
+img = Image.new('RGB', (W * S, H * S), PAPER)
 d = ImageDraw.Draw(img)
 
 
 def P(*v):
-    return tuple(x * S for x in v)
+    return tuple(int(round(x * S)) for x in v)
 
 
-# ---------- cutting mat ----------
-for x in range(0, W, 20):
-    d.line(P(x, 0, x, H), fill=GRID2 if x % 100 == 0 else GRID, width=(2 if x % 100 == 0 else 1) * S)
-for y in range(0, H, 20):
-    d.line(P(0, y, W, y), fill=GRID2 if y % 100 == 0 else GRID, width=(2 if y % 100 == 0 else 1) * S)
-for x in range(0, W, 100):
-    d.text(P(x + 4, 4), str(x // 10), font=MONO(12), fill=GRID2)
-noise = Image.effect_noise((W * S // 4, H * S // 4), 18).resize((W * S, H * S)).convert('L')
-img = Image.composite(img, Image.new('RGB', img.size, '#1f4a3d'), noise.point(lambda v: 200 + v // 5))
-d = ImageDraw.Draw(img)
+def text(x, y, s, size=17, fill=INK, anchor='lm', bold=True, f=None):
+    d.text(P(x, y), s, font=f or (MONOB if bold else MONO)(size), fill=fill, anchor=anchor)
 
 
-def shadow_box(box, radius, fill, outline=None, width=0):
-    x0, y0, x1, y1 = box
+def tag(x, y, s, anchor='lm', size=15, bg='#ffffff', fg=INK):
+    f = MONOB(size)
+    w = d.textlength(s, font=f) / S + 12
+    x0 = x if anchor[0] == 'l' else (x - w if anchor[0] == 'r' else x - w / 2)
+    d.rounded_rectangle(P(x0, y - 11, x0 + w, y + 11), 5 * S, fill=bg, outline=INK, width=S)
+    d.text(P(x0 + w / 2, y), s, font=f, fill=fg, anchor='mm')
+
+
+def drop_shadow(mask_at, pos):
     sh = Image.new('L', img.size, 0)
-    ImageDraw.Draw(sh).rounded_rectangle(P(x0 + 8, y0 + 10, x1 + 8, y1 + 10), radius * S, fill=110)
-    sh = sh.filter(ImageFilter.GaussianBlur(12 * S))
-    img.paste(Image.new('RGB', img.size, '#0e211b'), (0, 0), sh)
-    d.rounded_rectangle(P(*box), radius * S, fill=fill, outline=outline, width=width * S)
+    sh.paste(mask_at.point(lambda v: int(v * 0.45)), P(pos[0] + 7, pos[1] + 9))
+    img.paste(Image.new('RGB', img.size, '#3a352a'), (0, 0), sh.filter(ImageFilter.GaussianBlur(9 * S)))
 
 
-def wire(pts, color, width=7):
-    """Smooth wire through points (Catmull-Rom), dark outline like real insulation."""
-    path = []
-    pts = [pts[0]] + pts + [pts[-1]]
-    for i in range(1, len(pts) - 2):
-        p0, p1, p2, p3 = pts[i - 1], pts[i], pts[i + 1], pts[i + 2]
-        for t in [k / 24 for k in range(25)]:
-            t2, t3 = t * t, t * t * t
-            x = 0.5 * (2 * p1[0] + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2
-                       + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3)
-            y = 0.5 * (2 * p1[1] + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2
-                       + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3)
-            path.append((x * S, y * S))
-    d.line(path, fill='#0b0b0b', width=(width + 3) * S, joint='curve')
-    d.line(path, fill=WIRE[color], width=width * S, joint='curve')
-    hi = tuple(min(255, int(c, 16) + 70) for c in (WIRE[color][1:3], WIRE[color][3:5], WIRE[color][5:7]))
-    d.line([(x - S, y - 2 * S) for x, y in path], fill='#%02x%02x%02x' % hi, width=max(1, width // 3) * S)
+# ---------- photos ----------
+def photo(name, scale, pos, rot=0, box=None):
+    """Paste a module photo (white background keyed out). Returns orig-pixel -> canvas mapper."""
+    global d
+    im = Image.open(HERE / 'parts' / f'{name}.png').convert('RGB')
+    key = im.copy()
+    for c in ((0, 0), (im.width - 1, 0), (0, im.height - 1), (im.width - 1, im.height - 1)):
+        ImageDraw.floodfill(key, c, (255, 0, 255), thresh=44)
+    r, g, b = key.split()
+    # magenta key = R 255, G 0, B 255
+    mask = Image.eval(g, lambda v: 255 if v > 0 else 0)
+    notkey = Image.eval(r, lambda v: 0 if v == 255 else 255)
+    mask = Image.composite(Image.new('L', im.size, 255), mask, notkey)
+    mask = mask.filter(ImageFilter.MinFilter(3))
+    if box:
+        keep = Image.new('L', im.size, 0)
+        keep.paste(255, box)
+        mask = Image.composite(mask, keep, keep)
+    bx0, by0, bx1, by1 = mask.getbbox()
+    im, mask = im.crop((bx0, by0, bx1, by1)), mask.crop((bx0, by0, bx1, by1))
+    w, h = im.size
+    if rot:
+        im, mask = im.rotate(rot, expand=True), mask.rotate(rot, expand=True)
+    size = (int(im.width * scale * S), int(im.height * scale * S))
+    im, mask = im.resize(size, Image.LANCZOS), mask.resize(size, Image.LANCZOS)
+    drop_shadow(mask, pos)
+    img.paste(im, P(*pos), mask)
+    d = ImageDraw.Draw(img)
+
+    def at(x, y):
+        x, y = x - bx0, y - by0
+        if rot == 180:
+            x, y = w - 1 - x, h - 1 - y
+        elif rot == 90:
+            x, y = y, w - 1 - x
+        return pos[0] + x * scale, pos[1] + y * scale
+    return at
 
 
-def tag(x, y, text, color, align='l'):
-    fnt = MONOB(17)
-    w = d.textlength(text, font=fnt) / S + 14
-    x0, x1 = (x, x + w) if align == 'l' else (x - w, x)
-    d.rectangle(P(x0, y - 13, x1, y + 13), fill=WIRE[color])
-    d.text(P((x0 + x1) / 2, y), text, font=fnt, fill='#111111' if color in ('yellow', 'white', 'cyan') else '#ffffff',
-           anchor='mm')
-    return x0, x1
+# ---------- wires ----------
+def rounded(pts, r=13):
+    out = [pts[0]]
+    for a, b, c in zip(pts, pts[1:], pts[2:]):
+        def toward(p, q):
+            L = max(1e-6, ((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2) ** .5)
+            k = min(r, L / 2) / L
+            return p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k
+        p1, p2 = toward(b, a), toward(b, c)
+        for i in range(9):
+            t = i / 8
+            out.append(((1 - t) ** 2 * p1[0] + 2 * t * (1 - t) * b[0] + t * t * p2[0],
+                        (1 - t) ** 2 * p1[1] + 2 * t * (1 - t) * b[1] + t * t * p2[1]))
+    out.append(pts[-1])
+    return [P(*p) for p in out]
 
 
-def label(x, y, text, size=18, color=SILK, anchor='lm', bold=False):
-    d.text(P(x, y), text, font=(MONOB if bold else MONO)(size), fill=color, anchor=anchor)
+def wire(pts, color, width=6, pads=(True, True)):
+    path = rounded(pts)
+    d.line(path, fill=PAPER, width=(width + 8) * S, joint='curve')
+    d.line(path, fill='#151515', width=(width + 2) * S, joint='curve')
+    d.line(path, fill=C[color], width=width * S, joint='curve')
+    for on, (x, y) in zip(pads, (pts[0], pts[-1])):
+        if on:
+            d.ellipse(P(x - 7, y - 7, x + 7, y + 7), fill='#c9ccd0', outline='#55595e', width=S)
+            d.ellipse(P(x - 3, y - 3, x + 3, y + 3), fill=C[color])
 
 
-# ---------- board ----------
-CX, TOP, PITCH = 1200, 360, 45
-LX, RX = CX - 88, CX + 88
-ROWS = [TOP + i * PITCH for i in range(22)]
-LEFT = ['3V3', '3V3', 'RST', '4', '5', '6', '7', '15', '16', '17', '18', '8', '3', '46', '9', '10', '11', '12',
-        '13', '14', '5V', 'G']
-RIGHT = ['G', 'TX', 'RX', '1', '2', '42', '41', '40', '39', '38', '37', '36', '35', '0', '45', '48', '47', '21',
-         '20', '19', 'G', 'G']
-YL = dict((lab, y) for lab, y in zip(LEFT, ROWS) if lab.isdigit())
-YR = dict((lab, y) for lab, y in zip(RIGHT, ROWS) if lab.isdigit())
+def dot(x, y, color):
+    d.ellipse(P(x - 8, y - 8, x + 8, y + 8), fill=C[color], outline='#151515', width=S)
 
-bx0, bx1, by0, by1 = CX - 130, CX + 130, TOP - 90, ROWS[-1] + 85
-shadow_box((bx0, by0, bx1, by1), 10, PCB, PCB_EDGE, 3)
-d.rectangle(P(CX - 50, by0 - 60, CX + 50, by0 + 230), fill='#262a30')
-d.rectangle(P(CX - 42, by0 - 6, CX + 42, by0 + 216), fill='#b9bcc1')
-for i in range(3):
-    xx = CX - 36 + i * 27
-    d.line(P(xx, by0 - 48, xx, by0 - 18), fill='#d9a637', width=4 * S)
-    d.line(P(xx, by0 - 48, xx + 15, by0 - 48), fill='#d9a637', width=4 * S)
-label(CX, by0 + 95, 'ESP32', 15, '#33373d', 'mm', True)
-label(CX, by0 + 120, '-S3', 15, '#33373d', 'mm', True)
-label(CX, by0 + 147, 'N16R8', 13, '#33373d', 'mm')
-label(CX, ROWS[18], 'YD-ESP32', 13, SILK, 'mm', True)
-label(CX, ROWS[19], 'S3', 13, SILK, 'mm', True)
-d.ellipse(P(CX - 9, ROWS[16] - 9, CX + 9, ROWS[16] + 9), fill='#f4f4f4')
-label(CX, ROWS[16] + 22, 'RGB 48', 13, '#9aa0a6', 'mm')
-for ux, lab in ((CX - 58, 'UART'), (CX + 58, 'USB')):
-    d.rectangle(P(ux - 30, by1 - 26, ux + 30, by1 + 12), fill='#b9bcc1')
-    label(ux, by1 - 40, lab, 13, SILK, 'mm', True)
-for labs, x, side in ((LEFT, LX, 1), (RIGHT, RX, -1)):
-    for lab, y in zip(labs, ROWS):
-        d.rectangle(P(x - 11, y - 11, x + 11, y + 11), fill=PAD)
-        d.ellipse(P(x - 5, y - 5, x + 5, y + 5), fill='#3a2a08')
-        label(x + side * 20, y, lab, 15, SILK, 'lm' if side == 1 else 'rm', True)
-for p in ('35', '36', '37'):
+
+# ---------- drawn parts ----------
+BANDS = {'10k': ('#7a4a1e', '#111111', '#ef7d22'), '100k': ('#7a4a1e', '#111111', '#f0c020')}
+
+
+def resistor(x0, y0, x1, y1, val, label_dy=-26):
+    """Axial resistor with colour bands between two points (horizontal)."""
+    d.line(P(x0, y0, x1, y1), fill='#9aa0a6', width=4 * S)
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    L, T = 100, 30
+    d.rounded_rectangle(P(cx - L / 2, cy - T / 2, cx + L / 2, cy + T / 2), 12 * S, fill='#d9c08f',
+                        outline='#6e5a35', width=2 * S)
+    for i, col in enumerate(BANDS[val] + ('#c9a227',)):
+        o = -34 + i * 17 + (10 if i == 3 else 0)
+        d.rectangle(P(cx + o - 4, cy - T / 2 + 2, cx + o + 4, cy + T / 2 - 2), fill=col)
+    text(cx, cy + label_dy, val, 18, anchor='mm')
+
+
+def cap(x, y0, y1, val='100n'):
+    d.line(P(x, y0, x, y1), fill='#9aa0a6', width=4 * S)
+    cy = (y0 + y1) / 2
+    d.ellipse(P(x - 21, cy - 21, x + 21, cy + 21), fill='#e0a13a', outline='#7d5412', width=2 * S)
+    text(x, cy, '104', 12, '#5a3a08', 'mm')
+    text(x - 28, cy, val, 17, anchor='rm')
+
+
+def button(x, y, name, gpio):
+    """12x12 tact switch. (x, y) = top-left leg, legs 110 apart horizontally, 80 vertically."""
+    for lx in (x, x + 110):
+        for ly in (y, y + 80):
+            d.rectangle(P(lx - 9, ly - 5, lx + 9, ly + 5), fill='#c9ccd0', outline='#55595e', width=S)
+    d.rounded_rectangle(P(x + 5, y - 15, x + 105, y + 95), 6 * S, fill='#26282b', outline='#0c0c0c', width=2 * S)
+    d.rounded_rectangle(P(x + 13, y - 7, x + 97, y + 87), 4 * S, fill='#b9bcc1', outline='#7a7f86', width=S)
+    d.ellipse(P(x + 25, y + 5, x + 85, y + 75), fill='#e3a21a', outline='#7d5412', width=2 * S)
+    d.ellipse(P(x + 33, y + 11, x + 71, y + 49), fill='#f0bb45')
+    text(x + 55, y - 38, f'{name} · GPIO{gpio}', 22, anchor='mm')
+
+
+# =====================================================================================
+#  PHOTOS
+# =====================================================================================
+ESP = photo('esp32s3', 1.8, (1500, 330))
+ROWY = [83, 109.5, 136, 163, 189.5, 216, 243, 270, 296, 323, 350, 376.5, 403, 429.5, 456.5, 483, 509, 536, 563,
+        589.5, 616, 643]
+LEFT = ['3V3a', '3V3b', 'RST', '4', '5', '6', '7', '15', '16', '17', '18', '8', '3', '46', '9', '10', '11', '12',
+        '13', '14', '5V', 'Gl']
+RIGHT = ['Gr', 'TX', 'RX', '1', '2', '42', '41', '40', '39', '38', '37', '36', '35', '0', '45', '48', '47', '21',
+         '20', '19', 'Gr2', 'Gr3']
+LX, RX = ESP(13, 0)[0], ESP(257, 0)[0]
+YL = {n: ESP(0, y)[1] for n, y in zip(LEFT, ROWY)}
+YR = {n: ESP(0, y)[1] for n, y in zip(RIGHT, ROWY)}
+
+DISP = photo('display', 1.3, (230, 300), 180)
+HDR = ['T_IRQ', 'T_OUT', 'T_DIN', 'T_CS', 'T_CLK', 'MISO', 'LED', 'SCK', 'MOSI', 'DC', 'RESET', 'CS', 'GND', 'VCC']
+DP = {n: DISP(130, 166 + 18.93 * (i + .5)) for i, n in enumerate(HDR)}
+SDP = {n: DISP(670, y) for n, y in (('SCK', 271), ('MISO', 289), ('MOSI', 307.5), ('CS', 326))}
+
+MAX = photo('max98357a', 1.25, (640, 803), 90)
+MP = {n: MAX(x, 243) for n, x in (('LRC', 21), ('BCLK', 59), ('DIN', 97), ('GAIN', 134), ('SD', 172), ('GND', 210),
+                                  ('Vin', 247))}
+SPK_M, SPK_P = MAX(108, 52), MAX(159, 52)
+
+XL = photo('xl6009', 0.6, (1640, 1760), box=(170, 221, 813, 534))
+XO_N, XO_P, XI_N, XI_P = XL(197, 247), XL(197, 495), XL(785, 247), XL(785, 507)
+TP = photo('tp4056', 0.605, (2420, 1753.6), 180)
+T_OP, T_BP, T_BN, T_ON = TP(620, 257), TP(620, 312), TP(620, 450), TP(617, 515)
+
+# =====================================================================================
+#  RAILS
+# =====================================================================================
+GND_Y, V33_Y = 120, 160           # top rails
+GND_XL, V33_XL = 60, 100          # left trunks
+GND_XR, V33_XR = 3340, 3300       # right trunks
+CELL0, CELL_DY = 1210, 170
+last = CELL0 + 5 * CELL_DY
+SEL_Y = YR['47']
+
+wire([(GND_XL, last + 80), (GND_XL, GND_Y), (GND_XR, GND_Y), (GND_XR, SEL_Y + 80)], 'black', 7, (False, False))
+wire([(V33_XL, last), (V33_XL, V33_Y), (V33_XR, V33_Y), (V33_XR, SEL_Y)], 'red', 7, (False, False))
+text(GND_XL + 80, GND_Y - 26, 'GND', 26)
+text(V33_XL + 130, V33_Y + 24, '3V3', 26, C['red'])
+
+# ESP -> rails
+wire([(LX, YL['3V3a']), (LX - 45, YL['3V3a']), (LX - 45, V33_Y)], 'red', pads=(True, False))
+dot(LX - 45, V33_Y, 'red')
+wire([(RX, YR['Gr']), (RX + 40, YR['Gr']), (RX + 40, GND_Y)], 'black', pads=(True, False))
+dot(RX + 40, GND_Y, 'black')
+
+# =====================================================================================
+#  DISPLAY + SD
+# =====================================================================================
+sig = [('CS', '4', 'orange', 1285), ('RESET', '5', 'brown', 1255), ('DC', '6', 'yellow', 1225),
+       ('MOSI', '7', 'blue', 1195), ('SCK', '15', 'green', 1165), ('LED', '16', 'white', 1135)]
+x, y = DP['VCC']
+wire([(x, y), (1315, y), (1315, YL['3V3b']), (LX, YL['3V3b'])], 'red')
+for n, pin, col, ch in sig:
+    x, y = DP[n]
+    wire([(x, y), (ch, y), (ch, YL[pin]), (LX, YL[pin])], col)
+x, y = DP['GND']
+wire([(x, y), (1100, y), (1100, GND_Y)], 'black', pads=(True, False))
+dot(1100, GND_Y, 'black')
+for n in ('VCC', 'GND', 'CS', 'RESET', 'DC', 'MOSI', 'SCK', 'LED'):
+    x, y = DP[n]
+    tag(x - 14, y, n, 'rm', 13)
+
+sd = [('CS', '42', 'orange', 0), ('MISO', '41', 'green', 1), ('MOSI', '40', 'blue', 2), ('SCK', '39', 'yellow', 3)]
+for n, pin, col, k in sd:
+    x, y = SDP[n]
+    vx, hy, rx = 200 - 14 * k, 245 - 14 * k, RX + 70 + 14 * k
+    wire([(x, y), (vx, y), (vx, hy), (rx, hy), (rx, YR[pin]), (RX, YR[pin])], col, 5)
+for n, _, _, _ in sd:
+    x, y = SDP[n]
+    tag(x + 16, y, 'SD_' + n, 'lm', 13)
+text(620, 276, 'дисплей 2.4" TJCTM24024, вид ззаду · контролер ST7789 · слот SD', 21, anchor='mm')
+
+# =====================================================================================
+#  MAX98357A + speaker
+# =====================================================================================
+x, y = MP['Vin']
+wire([(x, y), (1090, y), (1090, 770), (V33_XL, 770)], 'red', pads=(True, False))
+dot(V33_XL, 770, 'red')
+x, y = MP['GND']
+wire([(x, y), (1110, y), (1110, 752), (GND_XL, 752)], 'black', pads=(True, False))
+dot(GND_XL, 752, 'black')
+x, y = MP['DIN']
+wire([(x, y), (1400, y), (1400, YL['8']), (LX, YL['8'])], 'cyan')
+x, y = MP['BCLK']
+wire([(x, y), (1140, y), (1140, YL['17']), (LX, YL['17'])], 'purple')
+x, y = MP['LRC']
+wire([(x, y), (1170, y), (1170, YL['18']), (LX, YL['18'])], 'pink')
+for n in ('Vin', 'GND', 'DIN', 'BCLK', 'LRC'):
+    x, y = MP[n]
+    tag(x - 14, y, n, 'rm', 13)
+d.ellipse(P(250, 850, 490, 1090), fill='#1b1b1b', outline='#4a4a4a', width=6 * S)
+d.ellipse(P(275, 875, 465, 1065), fill='#2a2a2a', outline='#3a3a3a', width=3 * S)
+d.ellipse(P(330, 930, 410, 1010), fill='#141414', outline='#444444', width=3 * S)
+text(370, 1112, 'динамік 3 Вт', 21, anchor='mm')
+wire([(480, 940), (560, 940), (560, SPK_P[1]), SPK_P], 'red', 5, (False, True))
+wire([(486, 1000), (560, 1000), (560, SPK_M[1]), SPK_M], 'black', 5, (False, True))
+text(812, 1142, 'MAX98357A (I2S)', 21, anchor='mm')
+
+# =====================================================================================
+#  BUTTONS (left column) — each: 10k to 3V3, 100n to GND, button to GND
+# =====================================================================================
+cells = [('OPTIONS', '9', 'white'), ('MENU', '10', 'grey'), ('X', '11', 'yellow'), ('Y', '12', 'orange'),
+         ('A', '13', 'green'), ('B', '14', 'blue')]
+for i, (name, pin, col) in enumerate(cells):
+    yc = CELL0 + i * CELL_DY
+    ch = 1150 + 35 * i
+    wire([(540, yc), (ch, yc), (ch, YL[pin]), (LX, YL[pin])], col)
+    wire([(V33_XL, yc), (430, yc)], 'red', 5, (False, True))
+    dot(V33_XL, yc, 'red')
+    wire([(430, yc + 80), (GND_XL, yc + 80)], 'black', 5, (True, False))
+    dot(GND_XL, yc + 80, 'black')
+    resistor(150, yc, 310, yc, '10k')
+    cap(350, yc, yc + 80)
+    dot(350, yc, col)
+    dot(350, yc + 80, 'black')
+    button(430, yc, name, pin)
+
+# SELECT on the right
+wire([(RX, SEL_Y), (2560, SEL_Y)], 'purple')
+wire([(2670, SEL_Y), (V33_XR, SEL_Y)], 'red', 5, (True, False))
+dot(V33_XR, SEL_Y, 'red')
+wire([(2670, SEL_Y + 80), (GND_XR, SEL_Y + 80)], 'black', 5, (True, False))
+dot(GND_XR, SEL_Y + 80, 'black')
+resistor(2830, SEL_Y, 2990, SEL_Y, '10k')
+cap(2760, SEL_Y, SEL_Y + 80)
+dot(2760, SEL_Y, 'purple')
+dot(2760, SEL_Y + 80, 'black')
+button(2560, SEL_Y, 'SELECT', '47')
+
+# =====================================================================================
+#  JOYSTICK KY-023 (drawn)
+# =====================================================================================
+jx, jy = 2560, 350
+m = Image.new('L', P(330, 340), 255)
+drop_shadow(m, (jx, jy))
+d = ImageDraw.Draw(img)
+d.rounded_rectangle(P(jx, jy, jx + 330, jy + 340), 10 * S, fill='#1b1d20', outline='#0c0c0c', width=2 * S)
+for hx, hy in ((jx + 305, jy + 25), (jx + 305, jy + 315), (jx + 110, jy + 25), (jx + 110, jy + 315)):
+    d.ellipse(P(hx - 13, hy - 13, hx + 13, hy + 13), fill=PAPER, outline='#b9bcc1', width=3 * S)
+d.rounded_rectangle(P(jx + 120, jy + 70, jx + 300, jy + 270), 8 * S, fill='#c9ccd0', outline='#7a7f86', width=2 * S)
+d.ellipse(P(jx + 130, jy + 90, jx + 290, jy + 250), fill='#101010', outline='#333333', width=3 * S)
+d.ellipse(P(jx + 160, jy + 120, jx + 260, jy + 220), fill='#1f1f1f', outline='#3d3d3d', width=3 * S)
+text(jx + 210, jy + 300, 'KY-023', 16, '#e8e8e2', 'mm')
+JP = {}
+for i, n in enumerate(('GND', '+5V', 'VRx', 'VRy', 'SW')):
+    y = jy + 70 + i * 45
+    JP[n] = (jx, y)
+    d.rectangle(P(jx - 12, y - 6, jx + 14, y + 6), fill='#c9ccd0', outline='#55595e', width=S)
+    text(jx + 24, y, n, 15, '#e8e8e2')
+x, y = JP['GND']
+wire([(x, y), (2500, y), (2500, GND_Y)], 'black', pads=(True, False))
+dot(2500, GND_Y, 'black')
+x, y = JP['+5V']
+wire([(x, y), (2470, y), (2470, V33_Y)], 'red', pads=(True, False))
+dot(2470, V33_Y, 'red')
+for n, pin, col, ch in (('VRx', '1', 'blue', 2200), ('VRy', '2', 'green', 2240), ('SW', '38', 'yellow', 2280)):
+    x, y = JP[n]
+    wire([(x, y), (ch, y), (ch, YR[pin]), (RX, YR[pin])], col)
+text(jx + 165, jy - 50, 'джойстик KY-023', 21, anchor='mm')
+text(jx + 165, jy - 20, 'живлення лише 3.3 В · SW = START', 19, C['red'], 'mm')
+
+# =====================================================================================
+#  POWER: 18650 -> TP4056 -> switch -> XL6009 (5 V) -> ESP
+# =====================================================================================
+wire([(LX, YL['Gl']), (LX - 40, YL['Gl']), (LX - 40, XO_N[1]), XO_N], 'black')
+wire([(LX, YL['5V']), (LX - 75, YL['5V']), (LX - 75, XO_P[1]), XO_P], 'red')
+wire([T_ON, XI_N], 'black')
+sy = XI_P[1]
+wire([XI_P, (2160, sy)], 'red')
+wire([(2210, sy), T_OP], 'red')
+d.rounded_rectangle(P(2130, sy - 80, 2290, sy - 28), 4 * S, fill='#c9ccd0', outline='#55595e', width=2 * S)
+d.rectangle(P(2165, sy - 70, 2255, sy - 40), fill='#3a3d42')
+d.rectangle(P(2170, sy - 104, 2205, sy - 62), fill='#151515')
+for px_ in (2160, 2210, 2260):
+    d.rectangle(P(px_ - 5, sy - 28, px_ + 5, sy - 8), fill='#c9ccd0', outline='#55595e', width=S)
+text(2210, sy - 124, 'вимикач SS12D00', 21, anchor='mm')
+# battery
+bx0, bx1, by = 2445, 2915, 2160
+d.rounded_rectangle(P(bx0, by - 55, bx1, by + 55), 16 * S, fill='#2f6fb5', outline='#1b3f6b', width=3 * S)
+d.rectangle(P(bx0 + 40, by - 53, bx0 + 60, by + 53), fill='#1b3f6b')
+d.rectangle(P(bx1, by - 22, bx1 + 14, by + 22), fill='#c9ccd0', outline='#55595e', width=S)
+text((bx0 + bx1) / 2 + 20, by - 10, '18650  Li-ion 3.7 В', 20, '#ffffff', 'mm')
+text((bx0 + bx1) / 2 + 20, by + 22, '~8 год гри', 15, '#d6e6f7', 'mm', False)
+text(bx0 + 20, by, '−', 30, '#ffffff', 'mm')
+text(bx1 - 24, by, '+', 30, '#ffffff', 'mm')
+wire([T_BN, (2370, T_BN[1]), (2370, by), (bx0, by)], 'black')
+wire([T_BP, (2400, T_BP[1]), (2400, 2060), (2975, 2060), (2975, by), (bx1 + 14, by)], 'red')
+for n, p in (('OUT−', T_ON), ('B−', T_BN), ('B+', T_BP), ('OUT+', T_OP)):
+    tag(p[0] + 16, p[1], n, 'lm', 13)
+for n, p, a in (('OUT−', XO_N, 'l'), ('OUT+ 5 В', XO_P, 'l'), ('IN−', XI_N, 'r'), ('IN+', XI_P, 'r')):
+    tag(p[0] + (16 if a == 'l' else -16), p[1], n, a + 'm', 13)
+text(XL(490, 211)[0], 1738, 'XL6009 DC-DC boost → 5.0 В', 21, anchor='mm')
+text(TP(380, 231)[0], 1990, 'TP4056 + захист DW01 (заряд USB-C)', 21, anchor='mm')
+# battery sense divider 100k / 100k -> GPIO3
+dy_ = 2290
+wire([(2975, 2120), (3040, 2120), (3040, dy_), (1560, dy_), (1560, XO_N[1])], 'grey', 5, (False, False))
+dot(2975, 2120, 'red')
+dot(1560, XO_N[1], 'black')
+resistor(2080, dy_, 2280, dy_, '100k', 30)
+resistor(1700, dy_, 1900, dy_, '100k', 30)
+wire([(1990, dy_), (1990, dy_ - 50), (1380, dy_ - 50), (1380, YL['3']), (LX, YL['3'])], 'teal', 5, (False, True))
+dot(1990, dy_, 'teal')
+text(1990, dy_ + 34, 'BAT/2 → GPIO3', 21, anchor='mm')
+text(2960, dy_ + 30, 'BAT+', 19, anchor='rm')
+text(1575, dy_ + 30, 'GND', 19)
+
+# =====================================================================================
+#  NOTES + TITLE
+# =====================================================================================
+for p in ('37', '36', '35'):
     y = YR[p]
-    d.line(P(RX - 9, y - 9, RX + 9, y + 9), fill='#ff4d4d', width=3 * S)
-    d.line(P(RX - 9, y + 9, RX + 9, y - 9), fill='#ff4d4d', width=3 * S)
-label(RX + 28, YR['36'], 'PSRAM — не чіпати', 16, '#ff8a80')
+    d.line(P(RX - 10, y - 10, RX + 10, y + 10), fill='#e0221a', width=4 * S)
+    d.line(P(RX - 10, y + 10, RX + 10, y - 10), fill='#e0221a', width=4 * S)
+text(RX + 30, YR['37'], 'GPIO 35–37 = PSRAM,', 20, '#c0221a')
+text(RX + 30, YR['36'], 'не підключати', 20, '#c0221a')
 
-
-def to_left(pin, x_from, y_from, color, bend=None):
-    y = YL[pin]
-    pts = [(x_from, y_from), (x_from + 60, y_from), (LX - 70, y), (LX, y)] if bend is None else bend + [(LX, y)]
-    wire(pts, color)
-
-
-def to_right(pin, x_from, y_from, color, bend=None):
-    y = YR[pin]
-    pts = [(x_from, y_from), (x_from - 60, y_from), (RX + 70, y), (RX, y)] if bend is None else bend + [(RX, y)]
-    wire(pts, color)
-
-
-# ---------- display (left top) ----------
-shadow_box((130, 300, 640, 700), 8, '#c8332e', '#8f1f1b', 2)
-d.rectangle(P(170, 340, 520, 620), fill='#101418')
-d.rectangle(P(182, 352, 508, 608), fill='#27313a')
-label(345, 480, '2.4" 320×240', 22, '#8fa3b3', 'mm', True)
-label(345, 512, 'ST7789 (на платі «ILI9341»)', 15, '#8fa3b3', 'mm')
-label(150, 670, 'TJCTM24024', 15, '#ffd9d6', 'lm', True)
-disp = [('CS', '4', 'orange'), ('RST', '5', 'brown'), ('DC', '6', 'yellow'), ('MOSI', '7', 'blue'),
-        ('SCK', '15', 'green'), ('LED', '16', 'white')]
-for i, (sig, pin, col) in enumerate(disp):
-    y = 360 + i * 42
-    d.rectangle(P(600, y - 9, 618, y + 9), fill=PAD)
-    label(592, y, sig, 15, '#ffffff', 'rm', True)
-    to_left(pin, 618, y, col)
-
-# ---------- audio (left middle) ----------
-shadow_box((300, 760, 640, 905), 8, '#5b2a86', '#3a1958', 2)
-label(320, 790, 'MAX98357A', 20, '#f1e6ff', 'lm', True)
-label(320, 818, 'I2S · 3 Вт', 15, '#cdb6ea', 'lm')
-d.ellipse(P(150, 765, 270, 885), fill='#1b1b1b', outline='#555555', width=4 * S)
-d.ellipse(P(185, 800, 235, 850), fill='#333333')
-wire([(270, 840), (300, 860)], 'red', 5)
-for i, (sig, pin, col) in enumerate((('BCLK', '17', 'purple'), ('LRC', '18', 'pink'), ('DIN', '8', 'cyan'))):
-    y = 790 + i * 40
-    d.rectangle(P(605, y - 9, 623, y + 9), fill=PAD)
-    label(597, y, sig, 15, '#ffffff', 'rm', True)
-    to_left(pin, 623, y, col)
-
-# ---------- power (left bottom) ----------
-shadow_box((130, 960, 640, 1360), 8, '#1d2125', '#3a3f46', 2)
-label(150, 990, 'ЖИВЛЕННЯ', 20, SILK, 'lm', True)
-d.rounded_rectangle(P(160, 1020, 220, 1300), 26 * S, fill='#4f7fbf', outline='#2b4f80', width=3 * S)
-d.rectangle(P(175, 1012, 205, 1022), fill='#c0c0c0')
-label(190, 1160, '18650', 16, '#ffffff', 'mm', True)
-blocks = [('TP4056+DW01', 1040, '#1f5fa8'), ('SS12D00', 1120, '#555b63'), ('BOOST → 5V', 1200, '#a83232')]
-for text, y, col in blocks:
-    d.rectangle(P(260, y, 470, y + 52), fill=col)
-    label(365, y + 26, text, 16, '#ffffff', 'mm', True)
-for y0, y1 in ((1092, 1120), (1172, 1200)):
-    d.line(P(365, y0, 365, y1), fill='#ffffff', width=3 * S)
-d.line(P(220, 1066, 260, 1066), fill='#ffffff', width=3 * S)
-label(260, 1290, 'заряд: USB-C на TP4056', 14, '#9aa0a6')
-# divider 100k/100k for battery sense
-rx = 545
-label(rx, 1010, 'BAT+', 14, SILK, 'mm', True)
-d.line(P(rx, 1022, rx, 1040), fill=SILK, width=3 * S)
-for yy, txt in ((1040, '100k'), (1130, '100k')):
-    d.rectangle(P(rx - 11, yy, rx + 11, yy + 56), outline=SILK, width=3 * S)
-    label(rx + 18, yy + 28, txt, 14, SILK, 'lm', True)
-d.line(P(rx, 1096, rx, 1130), fill=SILK, width=3 * S)
-d.line(P(rx, 1186, rx, 1206), fill=SILK, width=3 * S)
-for k in range(3):
-    d.line(P(rx - 14 + 5 * k, 1206 + 6 * k, rx + 14 - 5 * k, 1206 + 6 * k), fill=SILK, width=3 * S)
-d.ellipse(P(rx - 6, 1107, rx + 6, 1119), fill=SILK)
-wire([(rx, 1113), (600, 1113), (760, 1000), (900, YL['3']), (LX - 60, YL['3']), (LX, YL['3'])], 'grey', 6)
-d.rectangle(P(605, 1236, 623, 1254), fill=PAD)
-label(597, 1245, '5V', 15, '#ffffff', 'rm', True)
-d.rectangle(P(605, 1291, 623, 1309), fill=PAD)
-label(597, 1300, 'GND', 15, '#ffffff', 'rm', True)
-d.line(P(470, 1226, 520, 1226, 520, 1245, 605, 1245), fill='#ffffff', width=3 * S)
-to_left('5V' if '5V' in YL else '3', 623, 1245, 'red', [(623, 1245), (700, 1245), (LX - 70, ROWS[20])]) \
-    if False else wire([(623, 1245), (700, 1245), (LX - 70, ROWS[20]), (LX, ROWS[20])], 'red')
-wire([(623, 1300), (700, 1300), (LX - 70, ROWS[21]), (LX, ROWS[21])], 'black')
-
-# ---------- SD (right middle) ----------
-shadow_box((1560, 540, 1880, 760), 8, '#c8332e', '#8f1f1b', 2)
-d.rectangle(P(1600, 575, 1760, 725), fill='#b9bcc1', outline='#7a7f86', width=3 * S)
-label(1680, 650, 'SD', 30, '#5d6168', 'mm', True)
-label(1580, 742, 'на звороті дисплея', 13, '#ffd9d6', 'lm')
-for i, (sig, pin, col) in enumerate((('CS', '42', 'orange'), ('MISO', '41', 'green'), ('MOSI', '40', 'blue'),
-                                     ('SCK', '39', 'yellow'))):
-    y = 590 + i * 40
-    d.rectangle(P(1577, y - 9, 1595, y + 9), fill=PAD)
-    label(1773, y, sig, 15, '#ffffff', 'lm', True)
-    to_right(pin, 1577, y, col)
-
-# ---------- joystick (right top) ----------
-shadow_box((1900, 300, 2250, 640), 8, '#1d1f22', '#3a3f46', 2)
-d.rectangle(P(1950, 350, 2110, 510), fill='#e9e9e3')
-d.ellipse(P(1975, 375, 2085, 485), fill='#1a1a1a')
-d.ellipse(P(2000, 400, 2060, 460), fill='#2c2c2c')
-label(2130, 360, 'KY-023', 18, SILK, 'lm', True)
-label(2130, 388, 'лише 3.3 В!', 15, '#ffcf6a', 'lm', True)
-for i, (sig, pin, col) in enumerate((('VRx', '1', 'blue'), ('VRy', '2', 'green'), ('SW', '38', 'yellow'))):
-    y = 545 + i * 34
-    d.rectangle(P(1917, y - 9, 1935, y + 9), fill=PAD)
-    label(1945, y, sig, 15, '#ffffff', 'lm', True)
-wire([(1917, 545), (1860, 545), (1560, 470), (1400, YR['1']), (RX, YR['1'])], 'blue')
-wire([(1917, 579), (1840, 579), (1540, 515), (1400, YR['2']), (RX, YR['2'])], 'green')
-wire([(1917, 613), (1890, 640), (1900, 790), (1600, 800), (1400, YR['38']), (RX, YR['38'])], 'yellow')
-label(2000, 613, '= START', 14, '#ffcf6a', 'lm')
-
-# ---------- buttons (bottom) ----------
-shadow_box((780, 1450, 1980, 1760), 8, '#1a1c1f', '#3a3f46', 2)
-label(800, 1478, 'КНОПКИ', 20, SILK, 'lm', True)
-
-
-def button(x, y, name, cap, pin):
-    d.rectangle(P(x - 26, y - 26, x + 26, y + 26), fill='#c9c9c3')
-    d.ellipse(P(x - 19, y - 19, x + 19, y + 19), fill=cap, outline='#111', width=2 * S)
-    label(x, y + 44, name, 15, SILK, 'mm', True)
-    label(x, y + 64, f'GPIO{pin}', 13, '#9aa0a6', 'mm')
-
-
-under = [('SELECT', '47', 940), ('MENU', '10', 1040), ('OPTIONS', '9', 1140)]
-for name, pin, x in under:
-    button(x, 1560, name, '#e3a21a', pin)
-dia = [('X', '11', 1600, 1530), ('Y', '12', 1530, 1590), ('A', '13', 1670, 1590), ('B', '14', 1600, 1650)]
-for name, pin, x, y in dia:
-    button(x, y, name, '#e3a21a' if name in 'XA' else '#2b2b2b', pin)
-# pull-up schematic, once
-sx = 1820
-label(sx - 10, 1500, 'на кожну:', 14, '#9aa0a6', 'lm')
-label(sx + 40, 1528, '3V3', 14, SILK, 'mm', True)
-d.line(P(sx + 40, 1540, sx + 40, 1552), fill=SILK, width=3 * S)
-d.rectangle(P(sx + 29, 1552, sx + 51, 1600), outline=SILK, width=3 * S)
-label(sx + 58, 1576, '10k', 14, SILK, 'lm', True)
-d.line(P(sx + 40, 1600, sx + 40, 1640), fill=SILK, width=3 * S)
-d.ellipse(P(sx + 34, 1614, sx + 46, 1626), fill=SILK)
-d.line(P(sx + 40, 1620, sx - 10, 1620), fill=SILK, width=3 * S)
-label(sx - 14, 1620, 'GPIO', 13, SILK, 'rm', True)
-d.line(P(sx + 24, 1640, sx + 56, 1640), fill=SILK, width=3 * S)
-d.line(P(sx + 24, 1650, sx + 56, 1650), fill=SILK, width=3 * S)
-label(sx + 62, 1645, '100n', 14, SILK, 'lm', True)
-d.line(P(sx + 40, 1650, sx + 40, 1668), fill=SILK, width=3 * S)
-for k in range(3):
-    d.line(P(sx + 28 + 4 * k, 1668 + 6 * k, sx + 52 - 4 * k, 1668 + 6 * k), fill=SILK, width=3 * S)
-label(sx - 10, 1712, 'кнопка → GND', 14, '#9aa0a6', 'lm')
-
-# button wires: left pins go down the left channel, SELECT down the right one
-cols = {'9': 'white', '10': 'grey', '11': 'yellow', '12': 'orange', '13': 'green', '14': 'blue', '47': 'purple'}
-targets = {'9': (1140, 1534), '10': (1040, 1534), '11': (1600, 1504), '12': (1530, 1564), '13': (1670, 1564),
-           '14': (1600, 1624), '47': (940, 1534)}
-for k, pin in enumerate(('9', '10', '11', '12', '13', '14')):
-    y = YL[pin]
-    cx_ = 1030 - k * 13
-    tx, ty = targets[pin]
-    wire([(LX, y), (cx_, y + 4), (cx_, 1390 + k * 6), (tx, 1420 + k * 4), (tx, ty)], cols[pin], 6)
-wire([(RX, YR['47']), (1360, YR['47'] + 6), (1380, 1300), (1250, 1420), (940, 1440), (940, 1534)], 'purple', 6)
-
-# ---------- title ----------
-d.rectangle(P(40, 40, 900, 210), fill='#f1efe6')
-d.rectangle(P(40, 40, 900, 210), outline='#1a1a1a', width=3 * S)
-d.text(P(64, 62), 'RETRO CONSOLE', font=HEAD(54), fill='#1a1a1a')
-d.text(P(64, 128), 'ESP32-S3 · wiring', font=HEAD(30), fill='#555555')
-d.text(P(64, 170), 'github.com/AlexGerUA/retro-console-esp32s3', font=MONO(18), fill='#555555')
-d.text(P(W - 60, H - 40), 'Alex_Ger_UA', font=HEAD(26), fill='#cfe8dd', anchor='rm')
-d.text(P(60, H - 40), 'модулі живляться від 3V3 плати · GPIO 35–37 = PSRAM', font=MONO(16), fill='#cfe8dd', anchor='lm')
+tx, ty = 2350, 800
+d.rectangle(P(tx + 8, ty + 8, tx + 938, ty + 318), fill='#d8d3c4')
+d.rectangle(P(tx, ty, tx + 930, ty + 310), fill='#fffdf6', outline=INK, width=3 * S)
+d.text(P(tx + 30, ty + 24), 'RETRO CONSOLE', font=HEAD(66), fill=INK)
+d.text(P(tx + 30, ty + 104), 'ESP32-S3 · повна схема з’єднань', font=HEAD(32), fill='#444444')
+text(tx + 30, ty + 172, 'плата YD-ESP32-S3 N16R8 · прошивка Retro-Go', 17, '#444444', bold=False)
+text(tx + 30, ty + 204, 'резистори: 7 × 10 кОм, 2 × 100 кОм · конденсатори: 7 × 100 нФ', 17, '#444444', bold=False)
+text(tx + 30, ty + 236, 'усі кнопки замикають GPIO на GND (активний рівень 0)', 17, '#444444', bold=False)
+text(tx + 30, ty + 276, 'github.com/AlexGerUA/retro-console-esp32s3', 17)
+d.text(P(W - 50, H - 36), 'Alex_Ger_UA', font=HEAD(26), fill='#77736a', anchor='rm')
 
 img = img.resize((W, H), Image.LANCZOS)
-out = Path(__file__).with_name('pinout.png')
+out = HERE / 'pinout.png'
 img.save(out, optimize=True)
 print('saved', out, img.size)
