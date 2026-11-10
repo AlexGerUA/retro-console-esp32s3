@@ -1,4 +1,4 @@
-"""docs/pinout.png — full wiring diagram: module photos + coloured wires + every R and C.
+"""docs/pinout.png — full wiring diagram: module photos + coloured wires + every resistor.
 
 Pins come from firmware/retro-go-overlay/components/retro-go/targets/retro-console/config.h.
 Photos of the modules live in docs/parts/. Run: python docs/make_pinout.py
@@ -268,7 +268,7 @@ wire([(486, 1000), (560, 1000), (560, SPK_M[1]), SPK_M], 'black', 5, (False, Tru
 text(812, 1142, 'MAX98357A (I2S)', 21, anchor='mm')
 
 # =====================================================================================
-#  BUTTONS (left column) — each: 10k to 3V3, 100n to GND, button to GND
+#  BUTTONS (left column) — each: 10k to 3V3, button to GND
 # =====================================================================================
 cells = [('OPTIONS', '9', 'white'), ('MENU', '10', 'grey'), ('X', '11', 'yellow'), ('Y', '12', 'orange'),
          ('A', '13', 'green'), ('B', '14', 'blue')]
@@ -281,9 +281,6 @@ for i, (name, pin, col) in enumerate(cells):
     wire([(430, yc + 80), (GND_XL, yc + 80)], 'black', 5, (True, False))
     dot(GND_XL, yc + 80, 'black')
     resistor(150, yc, 310, yc, '10k')
-    cap(350, yc, yc + 80)
-    dot(350, yc, col)
-    dot(350, yc + 80, 'black')
     button(430, yc, name, pin)
 
 # SELECT on the right
@@ -293,9 +290,6 @@ dot(V33_XR, SEL_Y, 'red')
 wire([(2670, SEL_Y + 80), (GND_XR, SEL_Y + 80)], 'black', 5, (True, False))
 dot(GND_XR, SEL_Y + 80, 'black')
 resistor(2830, SEL_Y, 2990, SEL_Y, '10k')
-cap(2760, SEL_Y, SEL_Y + 80)
-dot(2760, SEL_Y, 'purple')
-dot(2760, SEL_Y + 80, 'black')
 button(2560, SEL_Y, 'SELECT', '47')
 
 # =====================================================================================
@@ -391,7 +385,7 @@ d.rectangle(P(tx, ty, tx + 930, ty + 310), fill='#fffdf6', outline=INK, width=3 
 d.text(P(tx + 30, ty + 24), 'RETRO CONSOLE', font=HEAD(66), fill=INK)
 d.text(P(tx + 30, ty + 104), 'ESP32-S3 · повна схема з’єднань', font=HEAD(32), fill='#444444')
 text(tx + 30, ty + 172, 'плата YD-ESP32-S3 N16R8 · прошивка Retro-Go', 17, '#444444', bold=False)
-text(tx + 30, ty + 204, 'резистори: 7 × 10 кОм, 2 × 100 кОм · конденсатори: 7 × 100 нФ', 17, '#444444', bold=False)
+text(tx + 30, ty + 204, 'резистори: 7 × 10 кОм (підтяжка кнопок), 2 × 100 кОм (дільник)', 17, '#444444', bold=False)
 text(tx + 30, ty + 236, 'усі кнопки замикають GPIO на GND (активний рівень 0)', 17, '#444444', bold=False)
 text(tx + 30, ty + 276, 'github.com/AlexGerUA/retro-console-esp32s3', 17)
 d.text(P(W - 50, H - 36), 'Alex_Ger_UA', font=HEAD(26), fill='#77736a', anchor='rm')
