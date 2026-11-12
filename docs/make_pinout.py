@@ -152,8 +152,10 @@ def cap(x, y0, y1, val='100n'):
     text(x - 28, cy, val, 17, anchor='rm')
 
 
-def button(x, y, name, gpio):
-    """12x12 tact switch. (x, y) = top-left leg, legs 110 apart horizontally, 80 vertically."""
+def button(x, y, name, gpio, label_at=None):
+    """12x12 tact switch. (x, y) = top-left leg, legs 110 apart horizontally, 80 vertically.
+    Wired by DIAGONAL legs (top-right / bottom-left or top-left / bottom-right): a diagonal pair is
+    always the switched pair, whichever way the 4-leg button is turned."""
     for lx in (x, x + 110):
         for ly in (y, y + 80):
             d.rectangle(P(lx - 9, ly - 5, lx + 9, ly + 5), fill='#c9ccd0', outline='#55595e', width=S)
@@ -161,7 +163,10 @@ def button(x, y, name, gpio):
     d.rounded_rectangle(P(x + 13, y - 7, x + 97, y + 87), 4 * S, fill='#b9bcc1', outline='#7a7f86', width=S)
     d.ellipse(P(x + 25, y + 5, x + 85, y + 75), fill='#e3a21a', outline='#7d5412', width=2 * S)
     d.ellipse(P(x + 33, y + 11, x + 71, y + 49), fill='#f0bb45')
-    text(x + 55, y - 38, f'{name} · GPIO{gpio}', 22, anchor='mm')
+    if label_at is None:
+        text(x + 55, y - 38, f'{name} · GPIO{gpio}', 22, anchor='mm')
+    else:
+        text(label_at[0], label_at[1], f'{name} · GPIO{gpio}', 22)
 
 
 # =====================================================================================
@@ -203,7 +208,7 @@ CELL0, CELL_DY = 1210, 170
 last = CELL0 + 5 * CELL_DY
 SEL_Y = YR['47']
 
-wire([(GND_XL, last + 80), (GND_XL, GND_Y), (GND_XR, GND_Y), (GND_XR, SEL_Y + 80)], 'black', 7, (False, False))
+wire([(GND_XL, last + 115), (GND_XL, GND_Y), (GND_XR, GND_Y), (GND_XR, SEL_Y + 115)], 'black', 7, (False, False))
 wire([(V33_XL, last), (V33_XL, V33_Y), (V33_XR, V33_Y), (V33_XR, SEL_Y)], 'red', 7, (False, False))
 text(GND_XL + 80, GND_Y - 26, 'GND', 26)
 text(V33_XL + 130, V33_Y + 24, '3V3', 26, C['red'])
@@ -268,29 +273,46 @@ wire([(486, 1000), (560, 1000), (560, SPK_M[1]), SPK_M], 'black', 5, (False, Tru
 text(812, 1142, 'MAX98357A (I2S)', 21, anchor='mm')
 
 # =====================================================================================
-#  BUTTONS (left column) — each: 10k to 3V3, button to GND
+#  BUTTONS — 10k from 3V3 straight onto the SIGNAL wire (the GPIO node), the button hangs
+#  off that same wire to GND. Nothing depends on the button's internal leg pairs.
 # =====================================================================================
+BTN_DROP = 35                      # signal wire y -> top legs of the button
 cells = [('OPTIONS', '9', 'white'), ('MENU', '10', 'grey'), ('X', '11', 'yellow'), ('Y', '12', 'orange'),
          ('A', '13', 'green'), ('B', '14', 'blue')]
+BX = 430
 for i, (name, pin, col) in enumerate(cells):
-    yc = CELL0 + i * CELL_DY
+    yc = CELL0 + i * CELL_DY           # signal wire: pull-up node -> GPIO
+    by = yc + BTN_DROP
     ch = 1150 + 35 * i
-    wire([(540, yc), (ch, yc), (ch, YL[pin]), (LX, YL[pin])], col)
-    wire([(V33_XL, yc), (430, yc)], 'red', 5, (False, True))
+    wire([(V33_XL, yc), (150, yc)], 'red', 5, (False, False))
     dot(V33_XL, yc, 'red')
-    wire([(430, yc + 80), (GND_XL, yc + 80)], 'black', 5, (True, False))
-    dot(GND_XL, yc + 80, 'black')
     resistor(150, yc, 310, yc, '10k')
-    button(430, yc, name, pin)
+    wire([(310, yc), (ch, yc), (ch, YL[pin]), (LX, YL[pin])], col)
+    dot(310, yc, col)                  # pull-up joins the signal wire here
+    wire([(BX + 110, yc), (BX + 110, by)], col, 5, (False, True))
+    dot(BX + 110, yc, col)             # button taps the same signal wire
+    wire([(BX, by + 80), (GND_XL, by + 80)], 'black', 5, (True, False))
+    dot(GND_XL, by + 80, 'black')
+    button(BX, by, name, pin, (BX + 150, by + 40))
 
-# SELECT on the right
-wire([(RX, SEL_Y), (2560, SEL_Y)], 'purple')
-wire([(2670, SEL_Y), (V33_XR, SEL_Y)], 'red', 5, (True, False))
-dot(V33_XR, SEL_Y, 'red')
-wire([(2670, SEL_Y + 80), (GND_XR, SEL_Y + 80)], 'black', 5, (True, False))
-dot(GND_XR, SEL_Y + 80, 'black')
+# SELECT on the right: GPIO47 -> signal wire -> 10k -> 3V3, button from the wire to GND
+SBX = 2560
+sby = SEL_Y + BTN_DROP
+wire([(RX, SEL_Y), (2830, SEL_Y)], 'purple')
+dot(2830, SEL_Y, 'purple')
 resistor(2830, SEL_Y, 2990, SEL_Y, '10k')
-button(2560, SEL_Y, 'SELECT', '47')
+wire([(2990, SEL_Y), (V33_XR, SEL_Y)], 'red', 5, (False, False))
+dot(V33_XR, SEL_Y, 'red')
+wire([(SBX, SEL_Y), (SBX, sby)], 'purple', 5, (False, True))
+dot(SBX, SEL_Y, 'purple')
+wire([(SBX + 110, sby + 80), (GND_XR, sby + 80)], 'black', 5, (True, False))
+dot(GND_XR, sby + 80, 'black')
+button(SBX, sby, 'SELECT', '47', (SBX + 150, sby + 40))
+
+# legend: how a button is wired
+lx_, ly_ = 150, CELL0 + 5 * CELL_DY + 160
+text(lx_, ly_, 'кнопка: 10 кОм від 3V3 на сигнальний дріт (вузол GPIO), кнопка — з цього дроту на GND;', 17, '#444444', bold=False)
+text(lx_, ly_ + 26, 'ніжки кнопки — по діагоналі, тоді неважливо, як її повернуто', 17, '#444444', bold=False)
 
 # =====================================================================================
 #  JOYSTICK KY-023 (drawn)
