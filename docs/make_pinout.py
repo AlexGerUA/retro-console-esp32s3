@@ -1,13 +1,25 @@
-"""docs/pinout.png — full wiring diagram: module photos + coloured wires + every resistor.
+"""docs/pinout.png (Ukrainian) and docs/pinout_en.png (English) — full wiring diagram: module photos + coloured wires + every resistor.
 
 Pins come from firmware/retro-go-overlay/components/retro-go/targets/retro-console/config.h.
-Photos of the modules live in docs/parts/. Run: python docs/make_pinout.py
+Photos of the modules live in docs/parts/. Run: python docs/make_pinout.py [uk|en]  (no argument = both)
 """
+import subprocess
+import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 HERE = Path(__file__).parent
+if len(sys.argv) < 2:
+    for lang in ('uk', 'en'):
+        subprocess.run([sys.executable, __file__, lang], check=True)
+    sys.exit()
+LANG = sys.argv[1]
+
+
+def t(uk, en):
+    return en if LANG == 'en' else uk
+
 W, H, S = 3400, 2400, 2
 PAPER = '#f4f1e8'
 INK = '#1d1d1b'
@@ -244,7 +256,7 @@ for n, pin, col, k in sd:
 for n, _, _, _ in sd:
     x, y = SDP[n]
     tag(x + 16, y, 'SD_' + n, 'lm', 13)
-text(620, 276, 'дисплей 2.4" TJCTM24024, вид ззаду · контролер ST7789 · слот SD', 21, anchor='mm')
+text(620, 276, t('дисплей 2.4" TJCTM24024, вид ззаду · контролер ST7789 · слот SD', '2.4" display TJCTM24024, rear view · ST7789 controller · SD slot'), 21, anchor='mm')
 
 # =====================================================================================
 #  MAX98357A + speaker
@@ -267,7 +279,7 @@ for n in ('Vin', 'GND', 'DIN', 'BCLK', 'LRC'):
 d.ellipse(P(250, 850, 490, 1090), fill='#1b1b1b', outline='#4a4a4a', width=6 * S)
 d.ellipse(P(275, 875, 465, 1065), fill='#2a2a2a', outline='#3a3a3a', width=3 * S)
 d.ellipse(P(330, 930, 410, 1010), fill='#141414', outline='#444444', width=3 * S)
-text(370, 1112, 'динамік 3 Вт', 21, anchor='mm')
+text(370, 1112, t('динамік 3 Вт', 'speaker 3 W'), 21, anchor='mm')
 wire([(480, 940), (560, 940), (560, SPK_P[1]), SPK_P], 'red', 5, (False, True))
 wire([(486, 1000), (560, 1000), (560, SPK_M[1]), SPK_M], 'black', 5, (False, True))
 text(812, 1142, 'MAX98357A (I2S)', 21, anchor='mm')
@@ -311,8 +323,8 @@ button(SBX, sby, 'SELECT', '47', (SBX + 150, sby + 40))
 
 # legend: how a button is wired
 lx_, ly_ = 150, CELL0 + 5 * CELL_DY + 160
-text(lx_, ly_, 'кнопка: 10 кОм від 3V3 на сигнальний дріт (вузол GPIO), кнопка — з цього дроту на GND;', 17, '#444444', bold=False)
-text(lx_, ly_ + 26, 'ніжки кнопки — по діагоналі, тоді неважливо, як її повернуто', 17, '#444444', bold=False)
+text(lx_, ly_, t('кнопка: 10 кОм від 3V3 на сигнальний дріт (вузол GPIO), кнопка — з цього дроту на GND;', 'button: 10k from 3V3 onto the signal wire (the GPIO node), button from that wire to GND;'), 17, '#444444', bold=False)
+text(lx_, ly_ + 26, t('ніжки кнопки — по діагоналі, тоді неважливо, як її повернуто', 'use diagonal legs of the button, then its orientation does not matter'), 17, '#444444', bold=False)
 
 # =====================================================================================
 #  JOYSTICK KY-023 (drawn)
@@ -343,8 +355,8 @@ dot(2470, V33_Y, 'red')
 for n, pin, col, ch in (('VRx', '1', 'blue', 2200), ('VRy', '2', 'green', 2240), ('SW', '38', 'yellow', 2280)):
     x, y = JP[n]
     wire([(x, y), (ch, y), (ch, YR[pin]), (RX, YR[pin])], col)
-text(jx + 165, jy - 50, 'джойстик KY-023', 21, anchor='mm')
-text(jx + 165, jy - 20, 'живлення лише 3.3 В · SW = START', 19, C['red'], 'mm')
+text(jx + 165, jy - 50, t('джойстик KY-023', 'joystick KY-023'), 21, anchor='mm')
+text(jx + 165, jy - 20, t('живлення лише 3.3 В · SW = START', '3.3 V supply only · SW = START'), 19, C['red'], 'mm')
 
 # =====================================================================================
 #  POWER: 18650 -> TP4056 -> switch -> XL6009 (5 V) -> ESP
@@ -360,24 +372,24 @@ d.rectangle(P(2165, sy - 70, 2255, sy - 40), fill='#3a3d42')
 d.rectangle(P(2170, sy - 104, 2205, sy - 62), fill='#151515')
 for px_ in (2160, 2210, 2260):
     d.rectangle(P(px_ - 5, sy - 28, px_ + 5, sy - 8), fill='#c9ccd0', outline='#55595e', width=S)
-text(2210, sy - 124, 'вимикач SS12D00', 21, anchor='mm')
+text(2210, sy - 124, t('вимикач SS12D00', 'switch SS12D00'), 21, anchor='mm')
 # battery
 bx0, bx1, by = 2445, 2915, 2160
 d.rounded_rectangle(P(bx0, by - 55, bx1, by + 55), 16 * S, fill='#2f6fb5', outline='#1b3f6b', width=3 * S)
 d.rectangle(P(bx0 + 40, by - 53, bx0 + 60, by + 53), fill='#1b3f6b')
 d.rectangle(P(bx1, by - 22, bx1 + 14, by + 22), fill='#c9ccd0', outline='#55595e', width=S)
-text((bx0 + bx1) / 2 + 20, by - 10, '18650  Li-ion 3.7 В', 20, '#ffffff', 'mm')
-text((bx0 + bx1) / 2 + 20, by + 22, '~8 год гри', 15, '#d6e6f7', 'mm', False)
+text((bx0 + bx1) / 2 + 20, by - 10, t('18650  Li-ion 3.7 В', '18650  Li-ion 3.7 V'), 20, '#ffffff', 'mm')
+text((bx0 + bx1) / 2 + 20, by + 22, t('~8 год гри', '~8 h of play'), 15, '#d6e6f7', 'mm', False)
 text(bx0 + 20, by, '−', 30, '#ffffff', 'mm')
 text(bx1 - 24, by, '+', 30, '#ffffff', 'mm')
 wire([T_BN, (2370, T_BN[1]), (2370, by), (bx0, by)], 'black')
 wire([T_BP, (2400, T_BP[1]), (2400, 2060), (2975, 2060), (2975, by), (bx1 + 14, by)], 'red')
 for n, p in (('OUT−', T_ON), ('B−', T_BN), ('B+', T_BP), ('OUT+', T_OP)):
     tag(p[0] + 16, p[1], n, 'lm', 13)
-for n, p, a in (('OUT−', XO_N, 'l'), ('OUT+ 5 В', XO_P, 'l'), ('IN−', XI_N, 'r'), ('IN+', XI_P, 'r')):
+for n, p, a in (('OUT−', XO_N, 'l'), (t('OUT+ 5 В', 'OUT+ 5 V'), XO_P, 'l'), ('IN−', XI_N, 'r'), ('IN+', XI_P, 'r')):
     tag(p[0] + (16 if a == 'l' else -16), p[1], n, a + 'm', 13)
-text(XL(490, 211)[0], 1738, 'XL6009 DC-DC boost → 5.0 В', 21, anchor='mm')
-text(TP(380, 231)[0], 1990, 'TP4056 + захист DW01 (заряд USB-C)', 21, anchor='mm')
+text(XL(490, 211)[0], 1738, t('XL6009 DC-DC boost → 5.0 В', 'XL6009 DC-DC boost → 5.0 V'), 21, anchor='mm')
+text(TP(380, 231)[0], 1990, t('TP4056 + захист DW01 (заряд USB-C)', 'TP4056 + DW01 (USB-C charger)'), 21, anchor='mm')
 # battery sense divider 100k / 100k -> GPIO3
 dy_ = 2290
 wire([(2975, 2120), (3040, 2120), (3040, dy_), (1505, dy_), (1505, XO_N[1])], 'grey', 5, (False, False))
@@ -404,12 +416,12 @@ def bypass(p0, p1, kind, tag_at):
         d.ellipse(P(cx - r + 6, cy - r + 6, cx + r - 6, cy + r - 6), fill='#c9ccd0', outline='#7a7f86', width=S)
         d.chord(P(cx - r + 6, cy - r + 6, cx + r - 6, cy + r - 6), 35, 145, fill='#1d2a44')
         text(cx, cy - 4, '+', 16, '#1d2a44', 'mm')
-        label = '470 мкФ'
+        label = t('470 мкФ', '470 µF')
     else:
         r = 19
         d.ellipse(P(cx - r, cy - r, cx + r, cy + r), fill='#e0a13a', outline='#7d5412', width=2 * S)
         text(cx, cy, '104', 12, '#5a3a08', 'mm')
-        label = '100 нФ'
+        label = t('100 нФ', '100 nF')
     tag(tag_at[0], tag_at[1], label, 'mm', 13)
 
 
@@ -427,21 +439,21 @@ for p in ('37', '36', '35'):
     y = YR[p]
     d.line(P(RX - 10, y - 10, RX + 10, y + 10), fill='#e0221a', width=4 * S)
     d.line(P(RX - 10, y + 10, RX + 10, y - 10), fill='#e0221a', width=4 * S)
-text(RX + 30, YR['37'], 'GPIO 35–37 = PSRAM,', 20, '#c0221a')
-text(RX + 30, YR['36'], 'не підключати', 20, '#c0221a')
+text(RX + 30, YR['37'], t('GPIO 35–37 = PSRAM,', 'GPIO 35–37 = PSRAM,'), 20, '#c0221a')
+text(RX + 30, YR['36'], t('не підключати', 'do not connect'), 20, '#c0221a')
 
 tx, ty = 2350, 800
 d.rectangle(P(tx + 8, ty + 8, tx + 938, ty + 318), fill='#d8d3c4')
 d.rectangle(P(tx, ty, tx + 930, ty + 310), fill='#fffdf6', outline=INK, width=3 * S)
 d.text(P(tx + 30, ty + 24), 'RETRO CONSOLE', font=HEAD(66), fill=INK)
-d.text(P(tx + 30, ty + 104), 'ESP32-S3 · повна схема з’єднань', font=HEAD(32), fill='#444444')
-text(tx + 30, ty + 172, 'плата YD-ESP32-S3 N16R8 · прошивка Retro-Go', 17, '#444444', bold=False)
-text(tx + 30, ty + 204, 'резистори: 7 × 10 кОм (підтяжка кнопок), 2 × 100 кОм (дільник)', 17, '#444444', bold=False)
-text(tx + 30, ty + 236, 'конденсатори: 470 мкФ + 100 нФ на входах 5V і 3V3 плати', 17, '#444444', bold=False)
+d.text(P(tx + 30, ty + 104), t('ESP32-S3 · повна схема з’єднань', 'ESP32-S3 · full wiring diagram'), font=HEAD(32), fill='#444444')
+text(tx + 30, ty + 172, t('плата YD-ESP32-S3 N16R8 · прошивка Retro-Go', 'board YD-ESP32-S3 N16R8 · Retro-Go firmware'), 17, '#444444', bold=False)
+text(tx + 30, ty + 204, t('резистори: 7 × 10 кОм (підтяжка кнопок), 2 × 100 кОм (дільник)', 'resistors: 7 × 10k (button pull-ups), 2 × 100k (battery divider)'), 17, '#444444', bold=False)
+text(tx + 30, ty + 236, t('конденсатори: 470 мкФ + 100 нФ на входах 5V і 3V3 плати', 'capacitors: 470 µF + 100 nF on the board 5V and 3V3 inputs'), 17, '#444444', bold=False)
 text(tx + 30, ty + 276, 'github.com/AlexGerUA/retro-console-esp32s3', 17)
 d.text(P(W - 50, H - 36), 'Alex_Ger_UA', font=HEAD(26), fill='#77736a', anchor='rm')
 
 img = img.resize((W, H), Image.LANCZOS)
-out = HERE / 'pinout.png'
+out = HERE / ('pinout_en.png' if LANG == 'en' else 'pinout.png')
 img.save(out, optimize=True)
 print('saved', out, img.size)
